@@ -21,8 +21,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
@@ -36,6 +36,9 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.MockitoAnnotations;
 
 import org.springframework.boot.loader.archive.Archive;
+import org.springframework.boot.loader.archive.ExplodedArchive;
+import org.springframework.boot.loader.archive.JarFileArchive;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,6 +75,7 @@ public class PropertiesLauncherTests {
 		System.clearProperty("loader.config.name");
 		System.clearProperty("loader.config.location");
 		System.clearProperty("loader.system");
+		System.clearProperty("loader.classLoader");
 	}
 
 	@Test
@@ -209,9 +213,23 @@ public class PropertiesLauncherTests {
 	public void testCustomClassLoaderCreation() throws Exception {
 		System.setProperty("loader.classLoader", TestLoader.class.getName());
 		PropertiesLauncher launcher = new PropertiesLauncher();
-		ClassLoader loader = launcher.createClassLoader(Collections.<Archive>emptyList());
+		ClassLoader loader = launcher.createClassLoader(archives());
 		assertThat(loader).isNotNull();
 		assertThat(loader.getClass().getName()).isEqualTo(TestLoader.class.getName());
+	}
+
+	private List<Archive> archives() throws Exception {
+		List<Archive> list = new ArrayList<Archive>();
+		String path = System.getProperty("java.class.path");
+		for (String url : path.split(File.pathSeparator)) {
+			if (url.endsWith(".jar")) {
+				list.add(new JarFileArchive(new FileSystemResource(url).getFile()));
+			}
+			else {
+				list.add(new ExplodedArchive(new FileSystemResource(url).getFile()));
+			}
+		}
+		return list;
 	}
 
 	@Test

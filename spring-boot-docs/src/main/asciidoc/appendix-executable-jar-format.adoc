@@ -237,6 +237,22 @@ NOTE: `PropertiesLauncher` supports loading properties from
 |Boolean flag to indicate that all properties should be added to System properties
  (defaults to `false`)
 
+|`loader.parent.first`
+|Boolean flag to indicate that the class loader hierarchy should be "parent first",
+i.e. conventional (defaults to `true`)
+
+|`loader.parent.boot`
+|Boolean flag to indicate that the parent class laoder should be the "boot" loader, not the
+"system" class loader (defaults to `false`)
+
+If you have a custom layout that puts the application classes in the
+root of the archive, you might find you can launch it with
+`-Dloader.parent.first=false` and `-Dloader.parent.boot=true`
+(i.e. the opposite of the default class loader strategy). But in that
+case the class loader hierarchy does not contain the "system" loader,
+so some features of the default loader strategy might not work
+(e.g. you might find that some java agents break).
+
 |===
 
 When specified as environment variables or manifest entries, the following names should

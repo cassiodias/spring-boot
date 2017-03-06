@@ -119,6 +119,18 @@ public class PropertiesLauncher extends Launcher {
 	 */
 	public static final String SET_SYSTEM_PROPERTIES = "loader.system";
 
+	/**
+	 * Properties key for boolean flag (default false) which if set will cause the parent
+	 * class loader to be the boot loader, not the system class loader.
+	 */
+	public static final String BOOT_LOADER = "loader.parent.boot";
+
+	/**
+	 * Properties key for boolean flag (default true) which if set will cause the class
+	 * loader hierarchy to be "parent first" (the normal strategy for the JDK).
+	 */
+	public static final String PARENT_FIRST = "loader.parent.first";
+
 	private static final Pattern WORD_SEPARATOR = Pattern.compile("\\W+");
 
 	private final File home;
@@ -339,16 +351,36 @@ public class PropertiesLauncher extends Launcher {
 	@Override
 	protected ClassLoader createClassLoader(List<Archive> archives) throws Exception {
 		Set<URL> urls = new LinkedHashSet<URL>(archives.size());
+		if (!"false".equals(getPropertyWithDefault(BOOT_LOADER, "false"))) {
+			urls.add(this.parent.getUrl());
+		}
 		for (Archive archive : archives) {
 			urls.add(archive.getUrl());
 		}
-		ClassLoader loader = new LaunchedURLClassLoader(urls.toArray(new URL[0]),
-				getClass().getClassLoader());
+		ClassLoader loader = createClassLoader(urls.toArray(new URL[0]));
 		debug("Classpath: " + urls);
 		String customLoaderClassName = getProperty("loader.classLoader");
 		if (customLoaderClassName != null) {
 			loader = wrapWithCustomClassLoader(loader, customLoaderClassName);
 			debug("Using custom class loader: " + customLoaderClassName);
+		}
+		return loader;
+	}
+
+	@Override
+	protected ClassLoader createClassLoader(URL[] urls) throws Exception {
+		ClassLoader parentLoader = getClass().getClassLoader();
+		if (!"false".equals(getPropertyWithDefault(BOOT_LOADER, "false"))) {
+			// Use the boot class loader as a parent
+			parentLoader = parentLoader.getParent();
+		}
+		DelegatingClassLoader loader = new DelegatingClassLoader(urls, parentLoader);
+		if (!"true".equals(getPropertyWithDefault(PARENT_FIRST, "true"))) {
+			// Use a (traditional) parent first class loader
+			loader.setParentFirst(false);
+		}
+		else {
+			loader.setParentFirst(true);
 		}
 		return loader;
 	}
@@ -644,6 +676,68 @@ public class PropertiesLauncher extends Launcher {
 		@Override
 		public boolean matches(Entry entry) {
 			return entry.getName().endsWith(DOT_JAR) || entry.getName().endsWith(DOT_ZIP);
+		}
+
+	}
+
+	private static class DelegatingClassLoader extends LaunchedURLClassLoader {
+
+		private boolean parentFirst = true;
+
+		DelegatingClassLoader(URL[] urls, ClassLoader parent) {
+			super(urls, parent);
+		}
+
+		public void setParentFirst(boolean parentFirst) {
+			this.parentFirst = parentFirst;
+		}
+
+		@Override
+		protected Class<?> loadClass(String name, boolean resolve)
+				throws ClassNotFoundException {
+			synchronized (getClassLoadingLock(name)) {
+				// First, check if the class has already been loaded
+				Class<?> c = findLoadedClass(name);
+				if (c == null) {
+					try {
+						if (!this.parentFirst) {
+							return findClass(name);
+						}
+					}
+					catch (ClassNotFoundException e) {
+					}
+					return super.loadClass(name, resolve);
+				}
+				return c;
+			}
+		}
+
+		@Override
+		public URL getResource(String name) {
+
+			URL url = null;
+
+			if (this.parentFirst) {
+				url = getParent().getResource(name);
+				if (url != null) {
+					return (url);
+				}
+			}
+
+			url = findResource(name);
+			if (url != null) {
+				return (url);
+			}
+
+			if (!this.parentFirst) {
+				url = getParent().getResource(name);
+				if (url != null) {
+					return (url);
+				}
+			}
+
+			return (null);
+
 		}
 
 	}

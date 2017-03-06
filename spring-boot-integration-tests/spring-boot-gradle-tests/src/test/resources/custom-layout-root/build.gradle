@@ -1,0 +1,61 @@
+import org.springframework.boot.loader.tools.Layout
+import org.springframework.boot.loader.tools.LayoutFactory
+import org.springframework.boot.loader.tools.Layouts
+import org.springframework.boot.loader.tools.LibraryScope
+
+class CustomLayoutFactory implements LayoutFactory{
+
+    @Override
+    Layout getLayout(File source) {
+        if (source?.getName().toLowerCase().endsWith('.jar')) {
+            return new Layouts.Jar() {
+                @Override
+                public String getLibraryDestination(String libraryName, LibraryScope scope) {
+                    return "lib/";
+                }
+
+                @Override
+                public String getRepackagedClassesLocation() {
+                    return "";
+                }
+
+                @Override
+                public String getLauncherClassName() {
+                  return "org.springframework.boot.loader.PropertiesLauncher";
+                }
+
+            };
+        }
+
+        return Layout.forFile(source) ;
+    }
+
+
+}
+
+buildscript {
+	repositories {
+		mavenLocal()
+	}
+	dependencies {
+		classpath("org.springframework.boot:spring-boot-gradle-plugin:${project.bootVersion}")
+	}
+}
+
+apply plugin: 'java'
+apply plugin: 'org.springframework.boot'
+
+repositories {
+	mavenLocal()
+}
+
+springBoot  {
+
+	mainClass = "app.Application"
+	layoutFactory = new CustomLayoutFactory()
+
+}
+
+dependencies {
+	compile group: 'org.springframework.boot', name: 'spring-boot-starter'
+}
